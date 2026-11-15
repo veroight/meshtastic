@@ -1,0 +1,1239 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Meshtastic Passo a Passo 2D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: três colunas, como uma mesa de trabalho — narração à esquerda, mapa topográfico ao centro, inspetor do pacote à direita. Em ecrã estreito empilha. */
+:root{
+  --bg:#f2f5f8; --panel:#ffffff; --panel-2:#f7f9fb; --line:#d8e0e8; --fg:#13202e; --muted:#5a6a7c;
+  --sea:#d3e4f1; --land:#4f8a5d; --contour:#6f957a; --link:#9cb0c3;
+  --signal:#0a7fc0; --packet:#d07a1f; --ok:#1d9660; --warn:#cf4232; --violet:#7454d0; --quiet:#7f8ea0;
+  --r-client:#0a7fc0; --r-mute:#7f8ea0; --r-router:#d07a1f; --r-base:#1d9660; --r-other:#7454d0;
+  --f-to:#2f9bd6; --f-from:#25a56f; --f-id:#8193a7; --f-flags:#e08b2e; --f-ch:#8a6ae0; --f-next:#d8569b; --f-relay:#c9a414; --f-pay:#9aa8b8;
+  --f-display:"Sora","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b111b; --panel:#111a27; --panel-2:#0e1622; --line:#23324a; --fg:#e8eef6; --muted:#97a7bb;
+  --sea:#0e2034; --land:#7fb38a; --contour:#4e7d60; --link:#4a6a90;
+  --signal:#5cd6ff; --packet:#ffb347; --ok:#74e3a6; --warn:#ff7f6e; --violet:#c3a6ff; --quiet:#7d8ba1;
+  --r-client:#5cd6ff; --r-mute:#7d8ba1; --r-router:#ffb347; --r-base:#74e3a6; --r-other:#c3a6ff;
+  --f-to:#5cd6ff; --f-from:#74e3a6; --f-id:#9aa9bd; --f-flags:#ffb347; --f-ch:#c3a6ff; --f-next:#ff9fd0; --f-relay:#ffe27a; --f-pay:#56657a;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b111b; --panel:#111a27; --panel-2:#0e1622; --line:#23324a; --fg:#e8eef6; --muted:#97a7bb;
+  --sea:#0e2034; --land:#7fb38a; --contour:#4e7d60; --link:#4a6a90;
+  --signal:#5cd6ff; --packet:#ffb347; --ok:#74e3a6; --warn:#ff7f6e; --violet:#c3a6ff; --quiet:#7d8ba1;
+  --r-client:#5cd6ff; --r-mute:#7d8ba1; --r-router:#ffb347; --r-base:#74e3a6; --r-other:#c3a6ff;
+  --f-to:#5cd6ff; --f-from:#74e3a6; --f-id:#9aa9bd; --f-flags:#ffb347; --f-ch:#c3a6ff; --f-next:#ff9fd0; --f-relay:#ffe27a; --f-pay:#56657a;
+  color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px}
+.page{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;padding-block:14px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.brand b{display:block;font:700 17px/1.1 var(--f-display);letter-spacing:-.01em}
+.brand span{display:block;font:400 12px/1.3 var(--f-mono);color:var(--muted)}
+.links{display:flex;gap:8px}
+.links a{font:500 12px/1 var(--f-mono);color:var(--fg);text-decoration:none;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.links a:hover{border-color:var(--signal);color:var(--signal)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+main{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:12px;min-height:0}
+.col{min-height:0;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+#story{display:flex;flex-direction:column;gap:12px;padding:16px 18px;overflow:auto}
+#mapcol{display:flex;flex-direction:column;overflow:hidden}
+#pkt{border-top:1px solid var(--line);display:flex;flex-direction:column;max-height:42%;overflow:auto;flex:none}
+#pkt[hidden]{display:none}
+#pktFull{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px}
+#pktFull[hidden]{display:none}
+.pk-l{display:flex;flex-direction:column;gap:12px;min-width:0}
+.pk-r{min-width:0}
+
+.steps{display:flex;gap:10px;flex-wrap:wrap}
+.steps .grp{display:flex;gap:3px}
+.steps button{width:16px;height:6px;padding:0;border:0;border-radius:3px;background:var(--line);cursor:pointer}
+.steps button[aria-current="step"]{background:var(--signal);width:26px}
+.steps button.seen{background:color-mix(in srgb,var(--signal) 40%,var(--line))}
+.eyebrow{margin:0;font:500 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--packet)}
+#title{margin:0;font:700 22px/1.18 var(--f-display);letter-spacing:-.015em;text-wrap:balance}
+#body{margin:0;font-size:14.5px;line-height:1.55;color:var(--muted)}
+#body.q{font-style:italic;color:var(--fg);border-left:3px solid var(--packet);padding-left:12px}
+.say{border:1px solid color-mix(in srgb,var(--signal) 35%,var(--line));background:color-mix(in srgb,var(--signal) 7%,var(--panel));border-radius:12px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:12px}
+#say{margin:0;font-size:15.5px;line-height:1.55;min-height:3.1em}
+#say code,.blk code,.paybox code{font-family:var(--f-mono);font-size:.86em;background:color-mix(in srgb,var(--fg) 7%,transparent);padding:1px 4px;border-radius:4px}
+.sayrow{display:flex;align-items:center;gap:10px}
+#beat{font:500 11px/1 var(--f-mono);color:var(--muted)}
+#next{margin-left:auto;font:600 14px/1 var(--f-body);padding:11px 16px;border-radius:10px;border:1px solid var(--signal);background:var(--signal);color:var(--panel);cursor:pointer;display:flex;align-items:center;gap:8px}
+#next:disabled{background:transparent;color:var(--muted);border-color:var(--line);cursor:default}
+#next.wait{animation:nudge 1.8s ease-in-out infinite}
+@keyframes nudge{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--signal) 45%,transparent)}50%{box-shadow:0 0 0 6px transparent}}
+@media (prefers-reduced-motion:reduce){#next.wait{animation:none}}
+.blk{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:5px}
+.blk .lbl{font:500 10.5px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.blk p{margin:0;font-size:13.5px;line-height:1.5}
+.blk.code .lbl{color:var(--ok)}
+.ref{display:block;margin-top:4px;font:500 11px/1.45 var(--f-mono);color:var(--ok);word-break:break-word}
+.tbl{overflow-x:auto}
+.tbl table{border-collapse:collapse;width:100%;font-size:12.5px}
+.tbl th{font:500 10.5px/1.2 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.tbl td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.4}
+.tbl td:first-child{white-space:nowrap}
+.pill{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:20px;padding:0 5px;border-radius:10px;font:600 10.5px/1 var(--f-mono);border:1.5px solid currentColor;margin-right:6px}
+.ctrl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:12px;margin-top:auto}
+.ctrl button{font:600 13px/1 var(--f-body);padding:8px 11px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+.ctrl button:hover:not(:disabled){border-color:var(--signal)}
+.ctrl button:disabled{opacity:.4;cursor:default}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+.seg button{border:0;border-radius:0;font:500 12px/1 var(--f-mono);padding:8px 8px}
+.seg button[aria-pressed="true"]{background:color-mix(in srgb,var(--signal) 18%,transparent);color:var(--signal)}
+
+#sandbox{display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel-2)}
+#sandbox[hidden]{display:none}
+#sandbox .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+#sandbox label{display:flex;align-items:center;gap:8px;cursor:pointer}
+#sandbox input[type=range]{flex:1;min-width:110px;accent-color:var(--signal)}
+#sandbox input[type=checkbox]{accent-color:var(--signal);width:16px;height:16px}
+#sandbox select{font:500 12px var(--f-mono);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 6px}
+#sandbox .send{font:600 13px var(--f-body);padding:8px 12px;border-radius:8px;border:1px solid var(--packet);background:var(--packet);color:var(--panel);cursor:pointer}
+#selName{font:600 13px var(--f-display)}
+#hopOut{font:600 13px/1 var(--f-mono);color:var(--signal);min-width:2ch}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stats div{display:flex;flex-direction:column;gap:2px}
+.stats b{font:600 18px/1 var(--f-mono);font-variant-numeric:tabular-nums}
+.stats span{font-size:11px;color:var(--muted)}
+
+/* mapa */
+.mapwrap{position:relative;flex:1;min-height:0}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block}
+#overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.sea{fill:var(--sea)}
+.band{fill:var(--land);fill-opacity:.15;stroke:var(--contour);stroke-width:.7;vector-effect:non-scaling-stroke}
+.band.l0{fill-opacity:.2}
+.link{stroke:var(--link);stroke-width:1.4;vector-effect:non-scaling-stroke}
+.range{fill:color-mix(in srgb,var(--signal) 9%,transparent);stroke:var(--signal);stroke-width:1.3;stroke-dasharray:5 4;vector-effect:non-scaling-stroke}
+.node{cursor:pointer}
+.node .bd{fill:var(--panel);stroke:var(--rc);stroke-width:2.2;vector-effect:non-scaling-stroke}
+.node .pl{fill:var(--rc);opacity:.18}
+.node .ab{font:600 3.4px var(--f-mono);fill:var(--rc);text-anchor:middle;dominant-baseline:central}
+.node.mute .bd{stroke-dasharray:3 2}
+.node.dim{opacity:.35}
+.node.sel .bd{stroke-width:3.5}
+.node.r-client{--rc:var(--r-client)} .node.r-mute{--rc:var(--r-mute)} .node.r-router{--rc:var(--r-router)} .node.r-base{--rc:var(--r-base)} .node.r-other{--rc:var(--r-other)}
+.gwb{fill:var(--violet)}
+.gwt{font:700 2.4px var(--f-mono);fill:var(--panel);text-anchor:middle;dominant-baseline:central}
+.ring{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+.dot{stroke:var(--panel);stroke-width:1;vector-effect:non-scaling-stroke}
+.mqttl{stroke:var(--violet);stroke-width:1.4;stroke-dasharray:4 4;fill:none;vector-effect:non-scaling-stroke}
+.cloud{fill:var(--panel);stroke:var(--violet);stroke-width:1.4;vector-effect:non-scaling-stroke}
+.inset{fill:var(--panel-2);stroke:var(--violet);stroke-width:1.2;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.tower{stroke:var(--muted);stroke-width:1.4;fill:none;vector-effect:non-scaling-stroke}
+.towerx{stroke:var(--warn);stroke-width:2.2;vector-effect:non-scaling-stroke}
+.phone{fill:var(--panel);stroke:var(--signal);stroke-width:1.4;vector-effect:non-scaling-stroke}
+.bt{stroke:var(--signal);stroke-width:1.3;stroke-dasharray:2 2;vector-effect:non-scaling-stroke}
+
+.lb{position:absolute;left:0;top:0;width:0;height:0}
+.lb .nm{position:absolute;left:0;transform:translateX(-50%);font:600 12px/1 var(--f-display);white-space:nowrap;color:var(--fg);text-shadow:0 0 3px var(--bg),0 0 3px var(--bg)}
+.lb .up{position:absolute;left:0;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:3px}
+.lb .sub{font:500 9.5px/1 var(--f-mono);letter-spacing:.05em;color:var(--muted);white-space:nowrap;text-shadow:0 0 3px var(--bg)}
+.chip{font:500 11px/1.35 var(--f-mono);padding:3px 7px 4px;border-radius:6px;background:var(--panel);border:1px solid var(--line);color:var(--muted);white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.chip.recv{color:var(--signal);border-color:color-mix(in srgb,var(--signal) 45%,transparent)}
+.chip.relay{color:var(--panel);background:var(--signal);border-color:var(--signal)}
+.chip.origin{color:var(--panel);background:var(--packet);border-color:var(--packet);font-weight:600}
+.chip.wait{color:var(--packet);border-color:color-mix(in srgb,var(--packet) 45%,transparent)}
+.chip.quiet{color:var(--quiet);border-style:dashed}
+.chip.end{color:var(--violet);border-color:color-mix(in srgb,var(--violet) 45%,transparent)}
+.chip.miss,.chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+.chip.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 50%,transparent)}
+.chip.msg{font:500 12px/1.35 var(--f-body);color:var(--fg);border-color:color-mix(in srgb,var(--ok) 60%,transparent);background:color-mix(in srgb,var(--ok) 12%,var(--panel))}
+.chip.garble{color:var(--violet);letter-spacing:.06em}
+.chip .bar{position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--packet);animation:fill linear forwards}
+.paused .chip .bar{animation-play-state:paused}
+@keyframes fill{to{width:100%}}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+/* inspetor */
+.pkt-head{display:flex;flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:12px 16px 10px;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:default}
+#pktWho{font:600 15px/1.25 var(--f-display)}
+#pktSum{display:none;font:500 11px/1.3 var(--f-mono);color:var(--muted)}
+.pkt-body{display:flex;flex-direction:column;gap:12px;padding:0 16px 16px}
+.empty{color:var(--muted);font-size:13px;line-height:1.5}
+.bytes{display:grid;grid-template-columns:repeat(16,1fr);gap:2px}
+.bytes .b{font:500 9.5px/1 var(--f-mono);text-align:center;padding:6px 0;border-radius:3px;color:#08131e;font-variant-numeric:tabular-nums;transition:transform .2s}
+.bytes .pay{grid-column:1/-1;background:repeating-linear-gradient(90deg,var(--f-pay) 0 6px,color-mix(in srgb,var(--f-pay) 60%,var(--panel)) 6px 12px);color:var(--fg);padding:6px 8px;text-align:left}
+.bytes .b.hl{transform:translateY(-3px);box-shadow:0 0 0 2px var(--fg)}
+.blab{display:grid;grid-template-columns:4fr 4fr 4fr 1fr 1fr 1fr 1fr;gap:2px;font:500 9px/1.1 var(--f-mono);color:var(--muted);text-align:center;margin-top:-8px}
+table.fields{width:100%;border-collapse:collapse;font-size:12px}
+table.fields td{padding:5px 4px;border-top:1px solid var(--line);vertical-align:top}
+table.fields td:first-child{font:600 11px/1.3 var(--f-mono);white-space:nowrap;width:1%}
+table.fields td.v{font:500 11.5px/1.3 var(--f-mono);white-space:nowrap;width:1%}
+table.fields td.d{color:var(--muted);line-height:1.35}
+table.fields tr.hl td{background:color-mix(in srgb,var(--signal) 12%,transparent)}
+.chg{animation:flash 1.6s ease-out}
+@keyframes flash{0%{background:color-mix(in srgb,var(--packet) 50%,transparent)}100%{background:transparent}}
+.bits{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;font:500 10px/1 var(--f-mono);text-align:center}
+.bits div{padding:5px 0;border-radius:3px;background:var(--panel-2);border:1px solid var(--line)}
+.bits div.on{border-color:var(--f-flags);color:var(--f-flags)}
+.bitlab{display:grid;grid-template-columns:3fr 1fr 1fr 3fr;gap:2px;font:500 9px/1.1 var(--f-mono);color:var(--muted);text-align:center;margin-top:4px}
+.paybox{font-size:12.5px;line-height:1.5;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:8px 10px}
+.paybox b{color:var(--fg)}
+.route{font:500 12px/1.6 var(--f-mono)}
+.route .unk{color:var(--warn)}
+.air{margin:0;font:400 11.5px/1.45 var(--f-mono);color:var(--muted)}
+
+@media (max-width:1100px){
+  #pktFull{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .page{height:auto}
+  main{grid-template-columns:1fr;grid-template-rows:auto;min-height:0}
+  #mapcol{order:-1;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+  #pkt{max-height:32vh}
+  .legend{display:none}
+  .mapwrap{flex:none;height:40vh;max-width:100%}
+  #story{overflow:visible}
+  .pkt-head{cursor:pointer}
+  #pktSum{display:block}
+  #pkt:not(.open) .pkt-body{display:none}
+  .brand span{display:none}
+  #title{font-size:19px}
+  .lb .nm{font-size:10.5px}
+  .chip{font-size:9.5px;max-width:130px}
+  .lb .sub{display:none}
+}
+</style>
+
+<div class="page">
+  <header>
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+        <path d="M6 22 L15 8 L24 22 Z" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".45"/>
+        <circle cx="6" cy="22" r="3.4" fill="var(--packet)"/><circle cx="15" cy="8" r="3.4" fill="var(--signal)"/><circle cx="24" cy="22" r="3.4" fill="var(--signal)"/>
+      </svg>
+      <div><b>Meshtastic</b><span>como funciona, pacote a pacote</span></div>
+    </div>
+    <nav class="links" aria-label="Sites do projeto">
+      <a href="https://meshtastic.org/docs/introduction/" target="_blank" rel="noopener">meshtastic.org</a>
+      <a href="https://meshtastic.pt/" target="_blank" rel="noopener">meshtastic.pt</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="story" class="col" aria-label="Explicação">
+      <div class="steps" id="steps" aria-label="Passos"></div>
+      <p class="eyebrow" id="eyebrow"></p>
+      <h1 id="title"></h1>
+      <p id="body"></p>
+      <div class="say">
+        <p id="say" aria-live="polite"></p>
+        <div class="sayrow"><span id="beat"></span><button id="next" type="button">Continuar ▸</button></div>
+      </div>
+      <div id="sandbox" hidden>
+        <div class="row">Selecionado: <span id="selName">Ana</span></div>
+        <div class="row">
+          <label for="roleSel">Modo</label>
+          <select id="roleSel">
+            <option>CLIENT</option><option>CLIENT_MUTE</option><option>CLIENT_BASE</option><option>ROUTER</option><option>ROUTER_LATE</option>
+          </select>
+          <button class="send" id="sendBtn" type="button">Enviar daqui</button>
+        </div>
+        <div class="row">
+          <label for="hop">Saltos</label>
+          <input type="range" id="hop" min="1" max="7" value="3">
+          <output id="hopOut" for="hop">3</output>
+        </div>
+        <div class="row"><label><input type="checkbox" id="managed" checked> Ouvir antes de repetir</label></div>
+        <div class="stats">
+          <div><b id="sTx">0</b><span>transmissões</span></div>
+          <div><b id="sRx">0/7</b><span>rádios alcançados</span></div>
+          <div><b id="sQ">0</b><span>cancelaram</span></div>
+        </div>
+      </div>
+      <div id="blocks"></div>
+      <div class="ctrl">
+        <button id="prev" type="button">◂ Passo anterior</button>
+        <button id="replay" type="button">Repetir</button>
+        <div class="seg" role="group" aria-label="Velocidade da animação">
+          <button type="button" data-speed="0.6">0,6×</button>
+          <button type="button" data-speed="1" aria-pressed="true">1×</button>
+          <button type="button" data-speed="1.6">1,6×</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="mapcol" class="col" aria-label="Mapa da malha">
+      <div class="mapwrap">
+        <svg id="map" viewBox="-112 -112 266 162" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Mapa de uma serra com rádios Meshtastic">
+          <defs>
+            <clipPath id="clip"><rect x="-112" y="-112" width="266" height="162"/></clipPath>
+          </defs>
+          <g clip-path="url(#clip)">
+            <rect class="sea" x="-400" y="-400" width="800" height="800"/>
+            <g id="terrain"></g>
+            <g id="extras"></g>
+            <g id="links"></g>
+            <g id="fx"></g>
+            <g id="nodes"></g>
+          </g>
+        </svg>
+        <div id="overlay" aria-hidden="true"></div>
+      </div>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--r-client)"></i>CLIENT</span>
+        <span><i style="background:var(--r-mute)"></i>CLIENT_MUTE</span>
+        <span><i style="background:var(--r-base)"></i>CLIENT_BASE</span>
+        <span><i style="background:var(--r-router)"></i>ROUTER / ROUTER_LATE</span>
+        <span><i style="background:var(--packet);border-radius:2px"></i>pacote original</span>
+        <span><i style="background:var(--signal);border-radius:2px"></i>repetição</span>
+        <span><i style="background:var(--ok);border-radius:2px"></i>ACK</span>
+      </div>
+    <aside id="pkt" aria-label="Inspetor do pacote">
+      <button class="pkt-head" id="pktToggle" type="button" aria-expanded="false">
+        <span class="eyebrow">O pacote</span>
+        <span id="pktWho">Ainda nenhum pacote</span>
+        <span id="pktSum"></span>
+      </button>
+      <div class="pkt-body">
+        <div id="pktEmpty" class="empty">Quando um rádio criar ou repetir um pacote, os bytes aparecem aqui. Toca num rádio no mapa para ver a última cópia que ele recebeu.</div>
+        <div id="pktFull" hidden>
+          <div class="pk-l">
+            <div>
+              <div class="bytes" id="bytes"></div>
+              <div class="blab" style="margin-top:4px"><span>to</span><span>from</span><span>id</span><span>fl</span><span>ch</span><span>nx</span><span>rl</span></div>
+            </div>
+            <div>
+              <div class="bits" id="bits"></div>
+              <div class="bitlab"><span>hop_start</span><span>mqtt</span><span>ack</span><span>hop_limit</span></div>
+            </div>
+            <div class="paybox" id="paybox"></div>
+            <div class="route" id="route" hidden></div>
+            <p class="air" id="air"></p>
+          </div>
+          <div class="pk-r"><table class="fields"><tbody id="fields"></tbody></table></div>
+        </div>
+      </div>
+    </aside>
+    </section>
+
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const R = 60, AIR = 1.1;
+const svg = $('map'), overlay = $('overlay');
+const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ================= terreno (curvas de nível) ================= */
+function hash(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
+function vnoise(x, z) {
+  const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+  const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const smooth = (x, a, b) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function heightAt(x, z) {
+  let h = 0, amp = 1, f = 0.012;
+  for (let i = 0; i < 4; i++) { h += amp * vnoise(x * f + 10, z * f + 5); amp *= .5; f *= 2.1; }
+  h /= 1.875;
+  const coast = smooth(x, -155, -112);
+  const ridge = Math.exp(-((x + 5) ** 2) / 1800) * 9 + Math.exp(-((x - 60) ** 2 + (z + 70) ** 2) / 1500) * 16;
+  return (h * 26 - 5 + ridge) * coast + (coast - 1) * 8;
+}
+{
+  const X0 = -230, Z0 = -240, S = 2.5, nx = 200, nz = 170, vals = new Float64Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) vals[j * nx + i] = heightAt(X0 + i * S, Z0 + j * S);
+  const th = [0, 3.5, 7, 10.5, 14, 17.5, 21, 24.5, 28, 31.5];
+  const cs = d3.contours().size([nx, nz]).thresholds(th)(vals);
+  const path = d3.geoPath(d3.geoIdentity().scale(S).translate([X0, Z0]));
+  const g = $('terrain');
+  cs.forEach((c, i) => mk('path', { d: path(c), class: 'band' + (i === 0 ? ' l0' : '') }, g));
+}
+
+/* ================= rádios ================= */
+const DEFS = [
+  { id: 'A', name: 'Ana', x: -100, z: 0, num: '4f2c71a1' },
+  { id: 'B', name: 'Bruno', x: -70, z: -24, num: '9b03e4b2' },
+  { id: 'C', name: 'Carla', x: -60, z: 34, num: '1d77a0c3' },
+  { id: 'D', name: 'Duarte', x: -5, z: 22, num: 'c40e58d4' },
+  { id: 'E', name: 'Eva', x: 32, z: -14, num: '72ab19e5' },
+  { id: 'F', name: 'Filipa', x: 22, z: 40, num: '08f3c2f6' },
+  { id: 'G', name: 'Gil', x: 86, z: 10, num: 'e6519d17' },
+  { id: 'H', name: 'Helena', x: 112, z: -40, num: '3ac8b428' },
+  { id: 'X', name: 'Xavier', x: 20, z: -62, num: 'b7d26e39', extra: true },
+  { id: 'P', name: 'Porto', x: 158, z: -100, num: '60f1ad4a', remote: true },
+];
+const ROLE_CLASS = { CLIENT: 'r-client', CLIENT_MUTE: 'r-mute mute', CLIENT_BASE: 'r-base', ROUTER: 'r-router', ROUTER_LATE: 'r-router' };
+const ROLE_ABBR = { CLIENT: 'C', CLIENT_MUTE: 'CM', CLIENT_BASE: 'CB', ROUTER: 'R', ROUTER_LATE: 'RL' };
+const N = {}, NODES = [];
+for (const d of DEFS) {
+  const g = mk('g', { class: 'node r-client', transform: `translate(${d.x},${d.z})`, tabindex: '-1' }, $('nodes'));
+  const pl = mk('circle', { class: 'pl', r: 5 }, g);
+  mk('circle', { class: 'bd', r: 4.4 }, g);
+  const ab = mk('text', { class: 'ab' }, g); ab.textContent = 'C';
+  const gw = mk('g', { transform: 'translate(3.8,-3.8)' }, g); mk('circle', { class: 'gwb', r: 2.2 }, gw); const gt = mk('text', { class: 'gwt' }, gw); gt.textContent = 'GW'; gw.style.display = 'none';
+  const lb = document.createElement('div'); lb.className = 'lb';
+  lb.innerHTML = `<div class="up"><span class="chip" hidden></span><span class="sub" hidden></span></div><span class="nm"></span>`;
+  lb.querySelector('.nm').textContent = d.name; overlay.appendChild(lb);
+  const n = { ...d, g, pl, ab, gw, lb, chipEl: lb.querySelector('.chip'), subEl: lb.querySelector('.sub'),
+    num: parseInt(d.num, 16), byte: parseInt(d.num.slice(6), 16), state: new Map(), nb: [], active: true, pulse: -9,
+    role: 'CLIENT', fav: new Set(), channel: 'LongFast' };
+  g.addEventListener('click', () => onNodeClick(n));
+  N[d.id] = n; NODES.push(n);
+}
+const RADIO = NODES.filter(n => !n.remote);
+const byByte = b => NODES.find(n => n.byte === b);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const LINKS = [];
+for (let i = 0; i < RADIO.length; i++) for (let j = i + 1; j < RADIO.length; j++) {
+  const a = RADIO[i], b = RADIO[j];
+  if (dist(a, b) <= R) LINKS.push({ a, b, el: mk('line', { class: 'link', x1: a.x, y1: a.z, x2: b.x, y2: b.z }, $('links')) });
+}
+/* elementos extra */
+const EX = $('extras');
+const range = mk('circle', { class: 'range', cx: N.A.x, cy: N.A.z, r: R }, EX);
+const tower = mk('g', { transform: 'translate(-32,-60)' }, EX);
+mk('path', { class: 'tower', d: 'M-4 8 L0 -10 L4 8 M-2.6 2 L2.6 2 M-1.6 -3 L1.6 -3 M-5 -12 Q0 -16 5 -12' }, tower);
+mk('path', { class: 'towerx', d: 'M-5 -5 L5 5 M5 -5 L-5 5' }, tower);
+const phoneG = mk('g', {}, EX);
+mk('line', { class: 'bt', x1: N.A.x + 3, y1: N.A.z + 3, x2: N.A.x + 12, y2: N.A.z + 13 }, phoneG);
+mk('rect', { class: 'phone', x: N.A.x + 10, y: N.A.z + 11, width: 5.5, height: 9, rx: 1.2 }, phoneG);
+const PHONE = { x: N.A.x + 12.7, z: N.A.z + 15.5 };
+const mqttG = mk('g', {}, EX);
+const CLOUD = { x: 112, z: -96 };
+mk('path', { class: 'mqttl', d: `M${N.G.x} ${N.G.z} L${CLOUD.x} ${CLOUD.z}` }, mqttG);
+mk('path', { class: 'mqttl', d: `M${CLOUD.x} ${CLOUD.z} L${N.P.x} ${N.P.z}` }, mqttG);
+mk('rect', { class: 'inset', x: 143, y: -118, width: 30, height: 30, rx: 3 }, mqttG);
+mk('path', { class: 'cloud', d: `M${CLOUD.x - 11} ${CLOUD.z + 4} a5 5 0 0 1 2 -9.5 a7 7 0 0 1 13 -2 a5.5 5.5 0 0 1 8 6 a4 4 0 0 1 -1 5.5 Z` }, mqttG);
+$('nodes').appendChild(N.P.g);
+
+/* rótulos que não são rádios */
+function extraLabel(x, z, text) {
+  const lb = document.createElement('div'); lb.className = 'lb';
+  lb.innerHTML = `<div class="up"><span class="chip" hidden></span></div><span class="nm"></span>`;
+  lb.querySelector('.nm').textContent = text; overlay.appendChild(lb);
+  return { x, z, lb, chipEl: lb.querySelector('.chip'), isExtra: true };
+}
+const towerL = extraLabel(-32, -50, 'antena da operadora');
+const cloudL = extraLabel(CLOUD.x, CLOUD.z + 3, 'servidor MQTT');
+const phoneL = extraLabel(PHONE.x, PHONE.z + 6, 'telemóvel');
+const portoL = extraLabel(158, -85, 'outra malha (Porto)');
+const EXTRAS = [towerL, cloudL, phoneL, portoL];
+
+/* ajustar o enquadramento ao tamanho do mapa e posicionar rótulos HTML por cima do SVG */
+let pxPerUnit = 3, VIEW = { x: -112, y: -66, w: 230, h: 112 };
+function computeView(o) {
+  const pts = NODES.filter(n => n.active).map(n => [n.x, n.z]);
+  if (o.mqtt) pts.push([CLOUD.x, CLOUD.z - 6], [173, -118]);
+  if (o.tower) pts.push([-32, -72]);
+  if (o.phone) pts.push([PHONE.x, PHONE.z + 8]);
+  if (o.range) pts.push([N.A.x - 22, N.A.z - 40], [N.A.x + 40, N.A.z + 36]);
+  const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]);
+  const x0 = Math.min(...xs) - 34, x1 = Math.max(...xs) + 30, y0 = Math.min(...zs) - 22, y1 = Math.max(...zs) + 14;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+function fitView() {
+  const r = svg.getBoundingClientRect(); if (!r.width || !r.height) return;
+  const B = VIEW, a = r.width / r.height;
+  let { x, y, w, h } = B;
+  if (a > w / h) { w = h * a; x = B.x - (w - B.w) / 2; } else { h = w / a; y = B.y - (h - B.h) / 2; }
+  svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  const c = svg.querySelector('#clip rect'); c.setAttribute('x', x); c.setAttribute('y', y); c.setAttribute('width', w); c.setAttribute('height', h);
+}
+function placeLabels() {
+  fitView();
+  const ctm = svg.getScreenCTM(), box = overlay.getBoundingClientRect();
+  if (!ctm) return;
+  pxPerUnit = ctm.a;
+  const pt = svg.createSVGPoint();
+  const place = (o, x, z, gapUp, gapDown) => {
+    pt.x = x; pt.y = z; const p = pt.matrixTransform(ctm);
+    o.lb.style.transform = `translate(${(p.x - box.left).toFixed(1)}px,${(p.y - box.top).toFixed(1)}px)`;
+    const up = o.lb.querySelector('.up'), nm = o.lb.querySelector('.nm');
+    if (up) up.style.top = `${-gapUp}px`;
+    nm.style.top = `${gapDown}px`;
+  };
+  for (const n of NODES) place(n, n.x, n.z, 5.6 * pxPerUnit, 5.2 * pxPerUnit);
+  for (const e of EXTRAS) place(e, e.x, e.z, 4, 0);
+}
+new ResizeObserver(placeLabels).observe(svg);
+
+/* ================= tempo, eventos e efeitos ================= */
+let simTime = 0, speed = 1, simPaused = false;
+const events = [];
+function at(delay, fn) { const e = { t: simTime + delay, fn, dead: false }; events.push(e); return e; }
+const W = s => new Promise(r => at(s, r));
+function processEvents() {
+  events.sort((a, b) => a.t - b.t);
+  while (!simPaused && events.length && events[0].t <= simTime) { const e = events.shift(); if (!e.dead) e.fn(); }
+}
+const fx = [];
+function clearFx() { for (const f of fx) f.el.remove(); fx.length = 0; }
+function ringFx(o, color) {
+  const el = mk('circle', { class: 'ring', cx: o.x, cy: o.z, r: 1, stroke: color }, $('fx'));
+  const t0 = simTime;
+  fx.push({ el, update() { const k = (simTime - t0) / AIR; if (k >= 1) return false; el.setAttribute('r', Math.max(.5, k * R)); el.setAttribute('stroke-opacity', (1 - k).toFixed(3)); return true; } });
+}
+function travelFx(a, b, dur, color, bend = .12) {
+  const el = mk('circle', { class: 'dot', r: 2.1, fill: color }, $('fx'));
+  const t0 = simTime, dx = b.x - a.x, dz = b.z - a.z;
+  fx.push({ el, update() {
+    const k = Math.min(1, (simTime - t0) / dur), s = Math.sin(Math.PI * k) * bend;
+    el.setAttribute('cx', a.x + dx * k - dz * s); el.setAttribute('cy', a.z + dz * k + dx * s); return k < 1;
+  } });
+}
+const COL = () => ({ packet: css('--packet'), signal: css('--signal'), ok: css('--ok'), violet: css('--violet') });
+
+/* ================= texto ================= */
+const GL = '▓░▒#%&@*?$§¤';
+const garble = s => [...s].map(ch => ch === ' ' ? ' ' : GL[Math.floor(Math.random() * GL.length)]).join('');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hex8 = n => (n >>> 0).toString(16).padStart(8, '0');
+const hex2 = n => (n & 255).toString(16).padStart(2, '0');
+function chip(n, cls, html, barSec) {
+  const el = n.chipEl; el.className = 'chip ' + cls;
+  el.innerHTML = html + (barSec ? `<i class="bar" style="animation-duration:${barSec.toFixed(2)}s"></i>` : '');
+  el.hidden = false;
+}
+function clearChips() { for (const o of [...NODES, ...EXTRAS]) { o.chipEl.hidden = true; o.chipEl.className = 'chip'; } }
+function airtimeMs(bytes, sf = 11, bw = 250000, cr = 1, pre = 16) {
+  const ts = (2 ** sf) / bw * 1000, de = ts > 16 ? 1 : 0;
+  const n = 8 + Math.max(Math.ceil((8 * bytes - 4 * sf + 28 + 16) / (4 * (sf - 2 * de))) * (cr + 4), 0);
+  return (pre + 4.25) * ts + n * ts;
+}
+function pktBytes(p) {
+  const body = p.port === 'TEXT' ? new TextEncoder().encode(p.text).length + 6 : p.port === 'ROUTING' ? 10 : 6 + (p.route?.length || 0) * 5;
+  return 16 + body + (p.pki ? 12 : 0);
+}
+
+/* ================= narração controlada pelo clique ================= */
+const nextBtn = $('next'), sayEl = $('say');
+let clickR = null, listeners = [], btnState = 'run', runSince = 0, beatN = 0;
+function T(html) { sayEl.innerHTML = html; beatN++; $('beat').textContent = ''; }
+function setBtn(s) {
+  btnState = s; runSince = performance.now();
+  nextBtn.classList.toggle('wait', s === 'wait' || s === 'done');
+  nextBtn.disabled = s === 'run';
+  nextBtn.textContent = s === 'wait' ? 'Continuar ▸' : s === 'done' ? (current === SCENES.length - 1 ? 'Voltar ao início ▸' : 'Próximo passo ▸') : s === 'skip' ? 'Saltar ▸' : 'A animar…';
+  document.body.classList.toggle('paused', simPaused);
+}
+function next(html) {
+  simPaused = true; setBtn('wait');
+  return new Promise(r => { clickR = () => { clickR = null; T(html); simPaused = false; setBtn('run'); r(); }; });
+}
+function pauseOn(ev, filter, text) {
+  return new Promise(r => listeners.push({ ev, filter: filter || (() => true), r }))
+    .then(async a => { await next(typeof text === 'function' ? text(...a) : text); return a; });
+}
+const until = (ev, filter) => new Promise(r => listeners.push({ ev, filter: filter || (() => true), r, nopause: true }));
+function done() { simPaused = false; setBtn('done'); }
+function emit(ev, ...a) {
+  for (let i = 0; i < listeners.length; i++) {
+    const L = listeners[i];
+    if (L.ev === ev && L.filter(...a)) { listeners.splice(i, 1); if (!L.nopause) simPaused = true; L.r(a); return; }
+  }
+}
+nextBtn.addEventListener('click', () => {
+  if (btnState === 'wait' && clickR) clickR();
+  else if (btnState === 'done' || btnState === 'skip') go(current === SCENES.length - 1 ? 0 : current + 1);
+});
+
+/* ================= simulação Meshtastic ================= */
+let cfg = {};
+const stats = { tx: 0, rx: 0, quiet: 0 };
+function updStats() { $('sTx').textContent = stats.tx; $('sQ').textContent = stats.quiet; $('sRx').textContent = `${stats.rx}/${RADIO.filter(n => n.active).length - 1}`; }
+const detail = () => cfg.mode !== 'simple';
+const snrOf = d => Math.round(10 - 30 * Math.min(1, d / R));
+const ROUTERISH = ['ROUTER', 'ROUTER_LATE', 'CLIENT_BASE'];
+const canCancel = (m, p) => !(m.role === 'ROUTER' || m.role === 'ROUTER_LATE' || (m.role === 'CLIENT_BASE' && favTouch(m, p)));
+const favTouch = (m, p) => m.fav.has(p.from.id) || (p.to && m.fav.has(p.to.id));
+const canDecode = (m, p) => p.pki ? (m === p.to || m === p.from) : m.channel === p.channel;
+const hopsAway = p => p.hop_start - p.hop_limit;
+
+function newPkt(from, o = {}) {
+  const hop = o.hop ?? cfg.hop;
+  const p = { id: (Math.random() * 0xffffffff) >>> 0, from, to: o.to ?? null, hop_limit: hop, hop_start: hop,
+    want_ack: !!o.want_ack, via_mqtt: !!o.via_mqtt, channel: from.channel, next_hop: o.next_hop ?? 0, relay: from.byte,
+    port: o.port ?? 'TEXT', text: o.text ?? cfg.text, ok_to_mqtt: o.ok_to_mqtt ?? true, request_id: o.request_id ?? 0,
+    pki: !!o.pki, route: o.port === 'TRACEROUTE' ? [] : undefined };
+  from.state.set(p.id, { origin: true });
+  return p;
+}
+function send(n, o = {}) {
+  const p = newPkt(n, o);
+  chip(n, 'origin', cfg.mode === 'simple' ? 'envia' : p.to ? `envia para ${p.to.name}` : `envia · hop_limit ${p.hop_limit}`);
+  inspect(p, `criado por ${n.name}`);
+  at(o.delay ?? .4, () => transmit(n, p));
+  return p;
+}
+function markMiss(text = 'não chegou') { for (const m of RADIO) if (m.active && !m.state.size) chip(m, 'miss', text); }
+function transmit(n, p) {
+  stats.tx++; updStats(); n.pulse = simTime;
+  const c = COL(), col = p.port === 'ROUTING' ? c.ok : n === p.from ? c.packet : c.signal;
+  ringFx(n, col);
+  if (cfg.follow) inspect(p, `transmitido por ${n.name}`);
+  emit('tx', n, p);
+  for (const { node: m, d } of n.nb) {
+    travelFx(n, m, AIR, col);
+    const copy = { ...p, route: p.route ? [...p.route] : undefined };
+    at(AIR, () => receive(m, copy, d));
+  }
+}
+function receive(m, p, d) {
+  if (!m.active) return;
+  const snr = snrOf(d);
+  if (m.ignoreMqtt && p.via_mqtt) { chip(m, 'quiet', 'ignore_mqtt · descarta'); emit('drop', m, p); return; }
+  const st = m.state.get(p.id);
+  if (st) {
+    if (st.origin) { if (!st.acked && !p.to) { st.acked = true; if (detail()) chip(m, 'ok', 'ouviu a repetição · ACK implícito ✓'); emit('implicitAck', m, p); } return; }
+    if (st.pending && cfg.managed && canCancel(m, p)) {
+      st.pending.dead = true; st.pending = null; stats.quiet++; updStats();
+      if (detail()) chip(m, 'quiet', 'alguém já repetiu · cancela'); emit('cancel', m, p);
+    }
+    return;
+  }
+  const s = { p, snr, parent: byByte(p.relay) }; m.state.set(p.id, s); m.lastRx = p; stats.rx++; updStats();
+  const decodes = canDecode(m, p);
+  if (p.to === m) { arrive(m, p, s); return; }
+  if (cfg.mode === 'simple') chip(m, 'recv', cfg.showText && decodes ? `«${esc(p.text)}»` : 'recebeu');
+  else if (!decodes) chip(m, 'garble', esc(garble(p.text || 'xxxxxxxxxxxx')));
+  else if (p.to) chip(m, 'recv', `${p.port === 'ROUTING' ? 'ACK' : 'pacote'} de passagem · hop_limit ${p.hop_limit}`);
+  else chip(m, 'recv', cfg.showText ? `«${esc(p.text)}»` : `recebeu · hop_limit ${p.hop_limit} · SNR ${snr} dB`);
+  if (cfg.target === m.id) chip(m, 'msg', `«${esc(p.text)}»`);
+  emit('rx', m, p, s);
+  if (m.mqtt && !p.via_mqtt) gatewayUp(m, p);
+  if (p.hop_limit <= 0) { if (detail() && cfg.target !== m.id) chip(m, 'end', `hop_limit 0 · não repete`); emit('end', m, p); return; }
+  if (m.role === 'CLIENT_MUTE') { chip(m, 'quiet', 'CLIENT_MUTE · não repete'); emit('mute', m, p); return; }
+  if (p.next_hop && p.next_hop !== m.byte) { if (detail()) chip(m, 'quiet', `next_hop = ${hex2(p.next_hop)} · não é comigo`); emit('notme', m, p); return; }
+  const dec = shouldDecrement(m, p), hop = p.hop_limit - (dec ? 1 : 0);
+  const wait = relayWait(m, snr, p);
+  if (detail()) chip(m, 'wait', m.role === 'ROUTER' ? 'ROUTER · repete já' : m.role === 'ROUTER_LATE' || (m.role === 'CLIENT_BASE' && favTouch(m, p)) ? 'espera até os outros repetirem' : `SNR ${snr} dB · espera ${wait < 2.2 ? 'curta' : 'longa'}`, wait / speed);
+  emit('wait', m, p, wait);
+  s.pending = at(wait, () => {
+    s.pending = null;
+    const out = { ...p, hop_limit: hop, relay: m.byte, next_hop: nextHopFor(m, p), route: p.route ? [...p.route] : undefined };
+    if (out.port === 'TRACEROUTE' && decodes) out.route.push(m.num);
+    if (detail()) chip(m, 'relay', dec ? `repete · hop_limit ${p.hop_limit} → ${hop}` : `repete · favorito: hop_limit fica ${hop}`);
+    emit('relay', m, out, p, dec);
+    transmit(m, out);
+  });
+}
+function shouldDecrement(m, p) {             // Router::shouldDecrementHopLimit
+  if (hopsAway(p) === 0) return true;
+  if (!ROUTERISH.includes(m.role)) return true;
+  const prev = byByte(p.relay);
+  return !(prev && m.fav.has(prev.id) && ROUTERISH.includes(prev.role));
+}
+function relayWait(m, snr, p) {
+  if (!cfg.managed) return .3 + Math.random() * .5;
+  if (m.role === 'ROUTER') return .25 + Math.random() * .3;
+  const k = Math.min(1, Math.max(0, (snr + 20) / 30));
+  let w = .8 + k * 9 + Math.random() * .15;
+  if (m.role === 'ROUTER_LATE' || (m.role === 'CLIENT_BASE' && favTouch(m, p))) w += 5;
+  return w;
+}
+function nextHopFor(m, p) {
+  if (!cfg.useNextHop || !p.to || !cfg.learned || p.port !== 'TEXT') return 0;
+  const r = cfg.learned, i = r.indexOf(m), nx = i < 0 ? r[0] : r[i + 1];
+  return (nx ?? p.to).byte;
+}
+function arrive(m, p, s) {
+  if (p.port === 'ROUTING') {
+    chip(m, 'ok', 'ACK recebido · entregue ✓');
+    const chain = []; let x = s.parent;
+    while (x && x !== p.from) { chain.push(x); x = x.state.get(p.id)?.parent; }
+    cfg.learnedCandidate = chain;
+    inspect(p, `ACK recebido pela ${m.name}`);
+    emit('ack', m, p, chain); return;
+  }
+  if (p.port === 'TRACEROUTE') {
+    const diff = hopsAway(p) - p.route.length;
+    for (let i = 0; i < diff; i++) p.route.push(0xffffffff);           // TraceRouteModule::insertUnknownHops
+    chip(m, 'ok', `traceroute · ${hopsAway(p)} saltos`);
+    inspect(p, `traceroute recebido pelo ${m.name}`);
+    emit('trace', m, p); return;
+  }
+  chip(m, 'msg', `«${esc(p.text)}»`);
+  inspect(p, `recebido pelo ${m.name}`);
+  emit('arrive', m, p);
+  if (p.want_ack) at(.8, () => {
+    const ack = newPkt(m, { to: p.from, port: 'ROUTING', request_id: p.id, hop: p.hop_start, text: '' });
+    chip(m, 'ok', 'recebeu · responde com ACK');
+    if (cfg.follow) inspect(ack, `ACK criado pelo ${m.name}`);
+    at(.5, () => transmit(m, ack));
+  });
+}
+function gatewayUp(g, p) {
+  if (!canDecode(g, p)) return;
+  if (!p.ok_to_mqtt) { chip(g, 'quiet', 'ok_to_mqtt = 0 · não sobe'); emit('noUp', g, p); return; }
+  chip(g, 'origin', 'gateway · envia para o MQTT');
+  const c = COL();
+  travelFx(g, CLOUD, 1.6, c.violet, 0);
+  emit('up', g, p);
+  at(1.6, () => {
+    chip(cloudL, 'ok', 'reencaminha');
+    travelFx(CLOUD, N.P, 1.6, c.violet, 0);
+    at(1.6, () => { N.P.pulse = simTime; ringFx(N.P, c.violet); chip(N.P, 'msg', `«${esc(p.text)}»`); emit('remote', p); });
+  });
+}
+function mqttDown(g, text) {
+  const p = newPkt(N.P, { text, hop: 3 }), c = COL();
+  chip(N.P, 'origin', 'responde');
+  travelFx(N.P, CLOUD, 1.6, c.violet, 0);
+  at(1.6, () => {
+    travelFx(CLOUD, g, 1.6, c.violet, 0);
+    at(1.6, () => {
+      const out = { ...p, via_mqtt: true, relay: g.byte };
+      g.state.set(p.id, { origin: true });
+      chip(g, 'origin', 'desce para o rádio · via_mqtt = 1');
+      inspect(out, 'a descer no gateway (Gil)');
+      emit('down', g, out);
+      transmit(g, out);
+    });
+  });
+}
+function resetSim() {
+  events.length = 0; clearFx(); clearChips();
+  for (const n of NODES) { n.state.clear(); n.pulse = -9; n.lastRx = null; }
+  stats.tx = stats.rx = stats.quiet = 0; updStats();
+}
+function configure(o = {}) {
+  cfg = { mode: o.mode ?? 'detail', hop: o.hop ?? 3, target: o.target ?? null, text: o.text ?? 'Estou bem, chego às 18h',
+    managed: o.managed ?? true, follow: !!o.follow, showText: !!o.showText };
+  resetSim();
+  for (const n of NODES) {
+    n.active = n.remote ? !!o.mqtt : n.extra ? !!o.xavier : true;
+    n.role = o.roles?.[n.id] ?? 'CLIENT'; n.fav = new Set(o.favs?.[n.id] ?? []);
+    n.channel = o.channels?.[n.id] ?? 'LongFast';
+    n.mqtt = !!o.gateway && n.id === o.gateway; n.ignoreMqtt = !!o.ignoreMqtt?.includes(n.id);
+    n.g.style.display = n.active ? '' : 'none'; n.lb.style.display = n.active ? '' : 'none';
+    n.g.setAttribute('class', `node ${n.remote ? 'r-other' : n.extra && n.channel !== 'LongFast' ? 'r-other' : ROLE_CLASS[n.role]}${o.dim ? ' dim' : ''}${sel === n && o.sandbox ? ' sel' : ''}`);
+    n.ab.textContent = n.remote ? 'P' : ROLE_ABBR[n.role];
+    n.gw.style.display = n.mqtt ? '' : 'none';
+    let sub = o.subs?.[n.id];
+    if (sub === undefined) {
+      const bits = [];
+      if (n.role !== 'CLIENT') bits.push(n.role);
+      if (n.fav.size) bits.push('★ ' + [...n.fav].map(id => N[id].name).join(', '));
+      if (n.mqtt) bits.push('gateway MQTT');
+      if (n.ignoreMqtt) bits.push('ignore_mqtt');
+      if (n.channel !== 'LongFast') bits.push('canal ' + n.channel);
+      sub = bits.join(' · ');
+    }
+    n.subEl.hidden = !sub; n.subEl.textContent = sub || '';
+  }
+  for (const n of RADIO) n.nb = RADIO.filter(m => m !== n && m.active && dist(m, n) <= R).map(m => ({ node: m, d: dist(m, n) }));
+  for (const l of LINKS) l.el.style.display = o.links !== false && l.a.active && l.b.active ? '' : 'none';
+  range.style.display = o.range ? '' : 'none';
+  tower.style.display = o.tower ? '' : 'none'; towerL.lb.style.display = o.tower ? '' : 'none';
+  phoneG.style.display = o.phone ? '' : 'none'; phoneL.lb.style.display = o.phone ? '' : 'none';
+  mqttG.style.display = o.mqtt ? '' : 'none'; cloudL.lb.style.display = o.mqtt ? '' : 'none'; portoL.lb.style.display = o.mqtt ? '' : 'none';
+  lastInspected = null; $('route').hidden = true;
+  VIEW = computeView(o);
+  placeLabels();
+}
+
+/* ================= inspetor ================= */
+const FIELDS = [['to', '--f-to', 4], ['from', '--f-from', 4], ['id', '--f-id', 4], ['flags', '--f-flags', 1], ['channel', '--f-ch', 1], ['next_hop', '--f-next', 1], ['relay_node', '--f-relay', 1]];
+const CH_HASH = { LongFast: 0x08, 'Família': 0x5e };
+let lastInspected = null;
+const flagsByte = p => (p.hop_limit & 7) | (p.want_ack ? 8 : 0) | (p.via_mqtt ? 16 : 0) | ((p.hop_start & 7) << 5);
+function fieldVals(p) {
+  return { to: p.to ? hex8(p.to.num) : 'ffffffff', from: hex8(p.from.num), id: hex8(p.id), flags: hex2(flagsByte(p)),
+    channel: hex2(CH_HASH[p.channel] ?? 0), next_hop: hex2(p.next_hop), relay_node: hex2(p.relay) };
+}
+function fieldDesc(p) {
+  return {
+    to: p.to ? `destino: ${p.to.name}` : 'destino: todos (broadcast)',
+    from: `quem criou: ${p.from.name}. Nunca muda.`,
+    id: 'número único; serve para reconhecer cópias repetidas',
+    flags: `hop_limit ${p.hop_limit} · want_ack ${+p.want_ack} · via_mqtt ${+p.via_mqtt} · hop_start ${p.hop_start}`,
+    channel: `hash do canal ${p.channel}: pista para escolher a chave`,
+    next_hop: p.next_hop ? `só o rádio que acaba em ${hex2(p.next_hop)} (${byByte(p.next_hop)?.name ?? '?'}) repete` : '00 = qualquer rádio pode repetir',
+    relay_node: `quem transmitiu esta cópia: ${byByte(p.relay)?.name ?? '?'}`,
+  };
+}
+function inspect(p, who) {
+  if (!p) return;
+  $('pktEmpty').hidden = true; $('pktFull').hidden = false;
+  const v = fieldVals(p), ds = fieldDesc(p);
+  const prev = lastInspected && lastInspected.id === p.id ? fieldVals(lastInspected) : null;
+  lastInspected = { ...p };
+  $('pktWho').textContent = who;
+  $('pktSum').textContent = `hop_limit ${p.hop_limit} · hop_start ${p.hop_start} · relay ${hex2(p.relay)}${p.via_mqtt ? ' · via_mqtt' : ''}`;
+  const bytes = $('bytes'); bytes.innerHTML = '';
+  for (const [f, col, n] of FIELDS) for (let i = 0; i < n; i++) {
+    const b = document.createElement('div'); b.className = 'b'; b.dataset.f = f; b.style.background = `var(${col})`;
+    b.textContent = n === 4 ? v[f].slice(i * 2, i * 2 + 2) : v[f];
+    if (prev && prev[f] !== v[f]) b.classList.add('chg');
+    bytes.appendChild(b);
+  }
+  const pay = document.createElement('div'); pay.className = 'b pay'; pay.dataset.f = 'payload';
+  pay.textContent = `parte cifrada · ${pktBytes(p) - 16} bytes`; bytes.appendChild(pay);
+  const tb = $('fields'); tb.innerHTML = '';
+  for (const [f, col] of FIELDS) {
+    const tr = document.createElement('tr'); tr.dataset.f = f;
+    tr.innerHTML = `<td style="color:var(${col})">${f}</td><td class="v">${v[f]}</td><td class="d">${esc(ds[f])}</td>`;
+    if (prev && prev[f] !== v[f]) tr.classList.add('chg');
+    tb.appendChild(tr);
+  }
+  const fb = flagsByte(p), bits = $('bits'); bits.innerHTML = '';
+  for (let i = 7; i >= 0; i--) { const d = document.createElement('div'); d.textContent = (fb >> i) & 1; if ((fb >> i) & 1) d.className = 'on'; bits.appendChild(d); }
+  let inner;
+  if (p.port === 'TEXT') inner = `<code>portnum</code> TEXT_MESSAGE_APP · <code>payload</code> «${esc(p.text)}» · <code>ok_to_mqtt</code> = ${+p.ok_to_mqtt}`;
+  else if (p.port === 'ROUTING') inner = `<code>portnum</code> ROUTING_APP · <code>request_id</code> ${hex8(p.request_id)}, o id da mensagem que está a confirmar`;
+  else inner = `<code>portnum</code> TRACEROUTE_APP · <code>route</code> com ${p.route.length} ID${p.route.length === 1 ? '' : 's'}`;
+  const how = p.pki ? `Cifrado com a chave pública do ${p.to.name} (X25519 + AES-CCM): só ele o abre.` : `Cifrado com a chave do canal ${p.channel} (AES). Sem a chave só se vê o cabeçalho.`;
+  $('paybox').innerHTML = `<b>Dentro da parte cifrada</b><br>${inner}<br>${how}`;
+  if (p.port === 'TRACEROUTE') {
+    const r = $('route'); r.hidden = false;
+    r.innerHTML = 'rota: ' + [p.from.name, ...p.route.map(x => x === 0xffffffff ? '<span class="unk">ffffffff</span>' : esc(NODES.find(q => q.num === x)?.name ?? hex8(x)))].join(' → ');
+  }
+  const b = pktBytes(p);
+  $('air').textContent = `${b} bytes no ar · LongFast (SF11, 250 kHz) ≈ ${Math.round(airtimeMs(b))} ms · saltos feitos = hop_start − hop_limit = ${hopsAway(p)}`;
+}
+const highlight = f => document.querySelectorAll('#bytes .b, #fields tr').forEach(el => el.classList.toggle('hl', el.dataset.f === f));
+function onNodeClick(n) {
+  if (SCENES[current].sandbox) { selectNode(n); return; }
+  if (n.lastRx) inspect(n.lastRx, `última cópia recebida por ${n.name}`);
+}
+
+/* ================= blocos de texto reutilizáveis ================= */
+const pill = (role, txt) => `<span class="pill" style="color:var(--r-${role})">${txt}</span>`;
+const ROLES_TABLE = `<div class="tbl"><table>
+<tr><th>Modo</th><th>Repete?</th><th>Para quê</th></tr>
+<tr><td>${pill('client', 'C')}CLIENT</td><td>sim, se ninguém repetiu antes</td><td>uso geral; é o modo por defeito</td></tr>
+<tr><td>${pill('mute', 'CM')}CLIENT_MUTE</td><td>nunca</td><td>rádios portáteis ou extra dentro de casa</td></tr>
+<tr><td>${pill('base', 'CB')}CLIENT_BASE</td><td>favoritos: sempre, no fim; resto: como CLIENT</td><td>rádio do telhado, a servir os teus outros rádios</td></tr>
+<tr><td>${pill('router', 'R')}ROUTER</td><td>sempre, logo à primeira</td><td>pontos altos e estratégicos, combinados com a comunidade</td></tr>
+<tr><td>${pill('router', 'RL')}ROUTER_LATE</td><td>sempre, depois de todos</td><td>tapar zonas mortas sem gastar saltos aos outros</td></tr>
+<tr><td>TRACKER · SENSOR</td><td>sim, enquanto acordados</td><td>enviam posição ou telemetria com prioridade</td></tr>
+<tr><td>TAK · TAK_TRACKER</td><td>sim</td><td>integração com ATAK, menos mensagens automáticas</td></tr>
+<tr><td>CLIENT_HIDDEN</td><td>só canais locais</td><td>quase não se anuncia; poupa bateria e tempo de ar</td></tr>
+<tr><td>LOST_AND_FOUND</td><td>sim</td><td>envia a posição para ajudar a encontrar o rádio</td></tr>
+<tr><td>REPEATER</td><td>—</td><td>obsoleto desde a 2.7.11</td></tr>
+</table></div>`;
+const PT_TABLE = `<div class="tbl"><table>
+<tr><th>Modo PT</th><th>Role</th><th>Saltos</th><th>Onde</th></tr>
+<tr><td>${pill('mute', 'CM')}Client Mute</td><td>CLIENT_MUTE</td><td>5*</td><td>portátil ou dentro de casa</td></tr>
+<tr><td>${pill('client', 'CL')}Client</td><td>CLIENT</td><td>4</td><td>fixo, com pouca linha de vista</td></tr>
+<tr><td>${pill('base', 'GT')}Gate</td><td>CLIENT_BASE</td><td>4</td><td>fixo, no telhado, sem Wi-Fi</td></tr>
+<tr><td>${pill('base', 'GW')}Gateway</td><td>CLIENT_BASE</td><td>4</td><td>fixo, no telhado, com Wi-Fi e MQTT ativo</td></tr>
+</table></div><p style="font-size:12px;color:var(--muted);margin:6px 0 0">* 5 saltos a partir do firmware 2.7.13; 4 nas versões anteriores, em que GT e GW usavam CLIENT. Todos usam rebroadcast <code>CORE_PORTNUMS_ONLY</code>, OK to MQTT ligado e Ignore MQTT desligado. Fonte: meshtastic.pt/getstarted/modes.</p>`;
+
+/* ================= passos ================= */
+const PARTS = ['O essencial', 'Dentro do pacote', 'Os modos dos rádios', 'Ligar à internet (MQTT)', 'Dúvidas da comunidade', 'Experimenta'];
+const SCENES = [
+  /* ---------------- Parte 1 ---------------- */
+  { part: 0, title: 'Sem rede, sem internet',
+    body: 'Na serra, no mar ou depois de um incêndio, a rede móvel pode falhar. O Meshtastic cria uma rede própria, de rádio para rádio.',
+    setup() { configure({ mode: 'simple', dim: true, tower: true, links: false }); },
+    async script() {
+      T('Uma serra no interior. A antena da operadora deixou de funcionar.'); chip(towerL, 'warn', 'sem serviço');
+      await next('Os telemóveis ficam sem rede: sem chamadas, sem SMS e sem dados.');
+      for (const id of ['A', 'D', 'E', 'H']) chip(N[id], 'warn', 'sem rede');
+      await next('Mas cada pessoa tem também um pequeno rádio Meshtastic. Os rádios falam diretamente uns com os outros, sem antena, sem operadora e sem internet.');
+      clearChips(); configure({ mode: 'simple', links: false });
+      done();
+    } },
+  { part: 0, title: 'Um rádio para cada pessoa',
+    body: 'O telemóvel liga-se ao rádio por Bluetooth (ou Wi-Fi). Escreves na app Meshtastic; quem transmite é o rádio.',
+    blocks: [['Para quem quer mais detalhe', 'Placas comuns usam um ESP32 ou um nRF52 com um chip LoRa (por exemplo o SX1262). Há apps para Android e iOS, um cliente web e uma biblioteca em Python.']],
+    setup() { configure({ mode: 'simple', phone: true, links: false }); },
+    async script() {
+      T('A Ana escreve uma mensagem na app Meshtastic do telemóvel.');
+      await next('A app envia a mensagem por Bluetooth para o rádio da Ana. O telemóvel serve só de ecrã e teclado.');
+      const p = newPkt(N.A, { hop: 0 }); chip(N.A, 'wait', 'a receber da app…');
+      travelFx(PHONE, N.A, 2, COL().packet, 0); await W(2.1);
+      await next('O rádio transmite a mensagem pelo ar, em LoRa.');
+      chip(N.A, 'origin', 'transmite'); transmit(N.A, p); await W(AIR + .3);
+      await next('O Bruno e a Carla estão perto e recebem. Cada um lê a mensagem na app do seu telemóvel.');
+      done();
+    } },
+  { part: 0, title: 'LoRa: longe, devagar e com pouca energia',
+    body: 'LoRa chega a vários quilómetros com muito pouca energia. Em troca, é lento: cada pacote leva no máximo 255 bytes.',
+    blocks: [['Para quem quer mais detalhe', 'Em Portugal usa-se a região <code>EU_868</code>: 869,4 a 869,65 MHz, até 27 dBm e duty cycle de 10%. O preset por defeito, <code>LongFast</code>, usa SF11 e 250 kHz.']],
+    setup() { configure({ mode: 'simple', range: true, links: false }); },
+    async script() {
+      T('O círculo tracejado mostra até onde chega o rádio da Ana. O alcance depende da altura, da antena e do terreno: vai de centenas de metros a dezenas de quilómetros.');
+      await next('A Ana transmite.');
+      const p = send(N.A, { hop: 0 }); await W(AIR + .5);
+      await next(`Só quem está dentro do círculo ouve: o Bruno e a Carla. Esta mensagem tem ${pktBytes(p)} bytes e ocupou o ar durante cerca de ${Math.round(airtimeMs(pktBytes(p)))} ms.`);
+      await next('O Duarte, a Eva e os outros estão longe demais. Para lá chegar, alguém tem de repetir a mensagem.');
+      markMiss('fora de alcance');
+      done();
+    } },
+  { part: 0, title: 'Cada rádio é uma ponte',
+    body: 'Quem recebe uma mensagem de canal repete-a. Salto a salto, ela atravessa a serra. Não há um ponto central: se um rádio se desligar, outro pode servir de ponte.',
+    setup() { configure({ mode: 'simple', hop: 3, showText: true }); },
+    async script() {
+      T('A Ana escreve no canal público LongFast: «Estou bem, chego às 18h». Uma mensagem de canal é para todos: no pacote, o destino é <code>ffffffff</code>.');
+      await next('A Ana transmite. Só o Bruno e a Carla a ouvem diretamente. As linhas mostram quem consegue ouvir quem.');
+      send(N.A);
+      await pauseOn('relay', m => m.id === 'C', 'A Carla repete a mensagem para quem está à volta dela. O Bruno também ia repetir, mas ouviu a Carla primeiro e desistiu.');
+      await pauseOn('relay', m => m.id === 'D', 'O Duarte ouviu a Carla e repete também. A mensagem já vai a meio da serra.');
+      await pauseOn('rx', m => m.id === 'E', 'A Eva recebe e lê a mensagem: Ana → Carla → Duarte → Eva, três saltos.');
+      await pauseOn('relay', m => m.id === 'E', 'A Eva também repete. É assim que deve ser: a mensagem é para todos, não só para ela. Quem a recebe ajuda a espalhá-la enquanto houver saltos. É assim que chega ao Gil.');
+      await next('Se fosse uma mensagem direta só para a Eva, ela não a repetia: respondia com uma confirmação (ACK). Vês isso no passo 9.');
+      done();
+    } },
+
+  /* ---------------- Parte 2 ---------------- */
+  { part: 1, title: 'Anatomia de um pacote', follow: true,
+    body: 'Cada mensagem viaja num pacote LoRa. Os primeiros 16 bytes são o cabeçalho e vão sempre em claro, para qualquer rádio o poder reencaminhar. O resto vai cifrado. Acompanha no inspetor à direita.',
+    blocks: [['No código', 'A estrutura <code>PacketHeader</code> tem de corresponder byte a byte ao que vai no ar.<span class="ref">src/mesh/RadioInterface.h · PacketHeader</span>']],
+    setup() { configure({ hop: 3 }); },
+    async script() {
+      const p = newPkt(N.A); chip(N.A, 'origin', 'a preparar o pacote'); inspect(p, 'a ser preparado pela Ana');
+      T('A Ana vai enviar uma mensagem para o canal. Antes de transmitir, o rádio monta o pacote. Vamos vê-lo campo a campo.');
+      const steps = [
+        ['to', '<code>to</code> (4 bytes): o destino. <code>ffffffff</code> quer dizer "para todos". Numa mensagem direta estaria aqui o ID do destinatário.'],
+        ['from', '<code>from</code> (4 bytes): o ID de quem criou a mensagem, aqui a Ana. Nunca muda pelo caminho.'],
+        ['id', '<code>id</code> (4 bytes): um número aleatório. Quem já viu este id ignora as cópias seguintes.'],
+        ['flags', '<code>flags</code> (1 byte): <code>hop_limit</code> (saltos que ainda restam), <code>want_ack</code>, <code>via_mqtt</code> e <code>hop_start</code> (saltos com que partiu). Vê os bits por baixo da tabela.'],
+        ['channel', '<code>channel</code> (1 byte): não é o nome do canal, é um hash. Para o LongFast com a chave por defeito dá <code>0x08</code>.'],
+        ['next_hop', '<code>next_hop</code> (1 byte): em mensagens diretas, o último byte do rádio que deve repetir a seguir. <code>00</code> = qualquer um.'],
+        ['relay_node', '<code>relay_node</code> (1 byte): o último byte de quem transmitiu esta cópia. Muda em cada salto.'],
+        ['payload', 'Depois vem a parte cifrada: o tipo de mensagem (<code>portnum</code>), o texto e o bit <code>ok_to_mqtt</code>.'],
+      ];
+      for (const [f, t] of steps) { await next(t); highlight(f); }
+      await next('A Ana transmite. O Bruno e a Carla recebem exatamente estes bytes e conseguem ler o cabeçalho sem precisar de chave.');
+      highlight(null); transmit(N.A, p); await W(AIR + .3);
+      done();
+    } },
+  { part: 1, title: 'O pacote a viajar', follow: true,
+    body: 'Em cada salto o pacote muda pouco: o hop_limit desce um e o relay_node passa a ser quem repetiu. O from, o id e o hop_start ficam iguais. Por isso qualquer rádio sabe a quantos saltos está a origem: hop_start − hop_limit.',
+    blocks: [['No código', '<span class="ref">src/mesh/NextHopRouter.cpp · perhapsRebroadcast() → tosend->hop_limit--</span>']],
+    setup() { configure({ hop: 3, follow: true }); },
+    async script() {
+      T('A Ana envia com <code>hop_limit</code> 3, o valor por defeito. Repara no inspetor: os campos que mudam piscam.');
+      await next('A Ana transmite.'); send(N.A);
+      const rel = (m, out, p) => `<b>${m.name}</b> repete: <code>hop_limit</code> ${p.hop_limit} → ${out.hop_limit} e <code>relay_node</code> passa a <code>${hex2(m.byte)}</code>. O <code>from</code>, o <code>id</code> e o <code>hop_start</code> não mudam.`;
+      await pauseOn('relay', m => m.id === 'C', rel);
+      await pauseOn('cancel', m => m.id === 'B', 'O Bruno também ia repetir, mas ouviu a Carla primeiro e cancelou. Vês porquê no próximo passo.');
+      await pauseOn('relay', m => m.id === 'D', rel);
+      await pauseOn('relay', m => m.id === 'E', rel);
+      await pauseOn('end', m => m.id === 'G', (m, p) => `O Gil recebe com <code>hop_limit</code> 0. Saltos feitos = ${p.hop_start} − 0 = ${hopsAway(p)}. Com 0 já não repete.`);
+      await next('A Helena fica de fora: os 3 saltos acabaram no Gil. Na Parte 3 vês como os favoritos podem poupar saltos.');
+      markMiss(); done();
+    } },
+  { part: 1, title: 'Ouvir antes de repetir',
+    body: 'Se todos repetissem tudo, o ar enchia-se de cópias. Cada rádio espera um pouco antes de repetir e, se entretanto ouvir outro repetir o mesmo id, cancela. Os rádios com sinal mais fraco (normalmente os mais longe) esperam menos, porque levam a mensagem mais longe.',
+    blocks: [['No código', 'A espera vem do SNR com que o pacote chegou: SNR baixo, janela curta.<span class="ref">src/mesh/RadioInterface.cpp · getTxDelayMsecWeighted() · src/mesh/FloodingRouter.cpp · perhapsCancelDupe()</span>']],
+    setup() { configure({ hop: 3 }); },
+    async script() {
+      T('Agora é o Duarte que envia uma mensagem para todos. Os vizinhos dele são a Carla, a Eva e a Filipa.');
+      await next('O Duarte transmite.'); send(N.D);
+      await pauseOn('wait', null, 'Os vizinhos recebem. Cada um mostra o SNR com que ouviu e começa a contar a sua espera. Quanto mais fraco o sinal, mais curta a espera.');
+      await pauseOn('relay', m => m.id === 'C', 'A Carla tinha o sinal mais fraco (está mais longe), por isso a espera dela acabou primeiro. Repete.');
+      await pauseOn('implicitAck', null, 'O Duarte ouviu a repetição da sua própria mensagem. Para uma mensagem de canal, isso conta como confirmação: é o <b>ACK implícito</b>.');
+      await pauseOn('cancel', null, m => `<b>${m.name}</b> ainda estava à espera quando ouviu outro rádio repetir o mesmo id. Cancela: é uma transmissão a menos no ar.`);
+      await next('Resultado: a mensagem chega a todos com menos transmissões do que rádios.');
+      done();
+    } },
+  { part: 1, title: 'Cabeçalho em claro, conteúdo cifrado', follow: true,
+    body: 'O canal LongFast usa uma chave AES pública e conhecida (AQ==), por isso qualquer rádio o lê. Um canal privado usa outra chave e tem outro hash. O Xavier está num canal "Família".',
+    blocks: [['No código', 'O hash do canal é um XOR dos bytes do nome com os da chave. Por defeito, um rádio repete também os pacotes que não consegue decifrar.<span class="ref">src/mesh/Channels.cpp · generateHash()</span>']],
+    setup() { configure({ hop: 4, xavier: true, channels: { X: 'Família' }, showText: true, text: 'Encontro no café às 18h' }); },
+    async script() {
+      T('O Xavier (a roxo) está só no canal Família. A Ana envia no LongFast.');
+      await next('A Ana transmite.'); send(N.A);
+      await pauseOn('rx', m => m.id === 'X', (m, p) => { inspect(p, 'visto pelo Xavier'); return 'O Xavier recebe. O hash <code>0x08</code> não corresponde a nenhum canal dele, por isso não consegue decifrar o texto: só vê ruído. Mas o cabeçalho está em claro…'; });
+      await pauseOn('relay', m => m.id === 'X', '…por isso consegue repetir na mesma: desconta um salto e põe o seu byte no <code>relay_node</code>. Ajuda a rede sem ler a mensagem.');
+      await next('Para conversas privadas, cria um canal com uma chave tua (256 bits) e partilha-o só com quem queres.');
+      done();
+    } },
+  { part: 1, title: 'Mensagem direta e confirmação', follow: true,
+    body: 'Numa mensagem direta, o to é o ID do destinatário e o want_ack vai a 1. O texto vai cifrado com a chave pública do destinatário. Quando a mensagem chega, o destino responde com um ACK.',
+    blocks: [['No código', 'Uma mensagem fiável é reenviada até 3 vezes se não chegar ACK. ACKs, traceroutes, posições e nodeinfo usam a chave do canal; o texto das mensagens diretas usa PKI.<span class="ref">src/mesh/NextHopRouter.h · NUM_RELIABLE_RETX = 3 · src/mesh/ReliableRouter.cpp</span>']],
+    setup() { configure({ hop: 3, follow: true }); },
+    async script() {
+      T('A Ana envia uma mensagem direta ao Gil: «Gil, tens água?».');
+      await next('A Ana transmite. Os rádios do caminho repetem o pacote, mas não conseguem ler o texto.');
+      send(N.A, { to: N.G, want_ack: true, pki: true, text: 'Gil, tens água?' });
+      await pauseOn('arrive', null, 'O Gil recebe e decifra (só ele tem a chave privada). Como <code>want_ack</code> = 1, responde com um ACK. O ACK é um pacote novo, a verde.');
+      await pauseOn('ack', null, (m, p, chain) => `A Ana recebe o ACK. O <code>request_id</code> é o id da mensagem dela, por isso sabe que foi entregue. O ACK veio por ${[...chain].reverse().map(n => n.name).join(' → ')}: este passa a ser o caminho conhecido (next_hop).`);
+      cfg.learned = cfg.learnedCandidate; cfg.useNextHop = !!cfg.learned?.length;
+      await next('A Ana envia uma segunda mensagem ao Gil. Desta vez o pacote leva <code>next_hop</code> = <code>c3</code> (a Carla).');
+      resetSim(); cfg.learned = cfg.learnedCandidate;
+      send(N.A, { to: N.G, want_ack: true, pki: true, text: 'Chego às 18h', next_hop: cfg.learned[0].byte });
+      await pauseOn('notme', m => m.id === 'B', 'O Bruno ouve, vê que o <code>next_hop</code> não é ele e fica calado.');
+      await pauseOn('arrive', null, 'Só os rádios do caminho aprendido repetiram. Se esse caminho falhar, a última tentativa volta a usar a inundação.');
+      done();
+    } },
+
+  /* ---------------- Parte 3: modos ---------------- */
+  { part: 2, title: 'Os modos dos rádios',
+    body: 'Cada rádio tem um modo (device role). O modo decide se o rádio repete, quando repete e o que anuncia. Neste mapa, cada rádio tem um modo diferente.',
+    blocks: [['Os modos do firmware', ROLES_TABLE + '<span class="ref">src/mesh/generated/meshtastic/config.pb.h · DeviceConfig.Role · src/mesh/FloodingRouter.cpp</span>']],
+    setup() { configure({ hop: 4, roles: { B: 'CLIENT_MUTE', D: 'ROUTER', F: 'ROUTER_LATE', G: 'CLIENT_BASE' } }); },
+    async script() {
+      T('Repara nas cores e nas letras: C = CLIENT, CM = CLIENT_MUTE, R = ROUTER, RL = ROUTER_LATE, CB = CLIENT_BASE.');
+      await next('A Ana (CLIENT, o modo por defeito) envia uma mensagem.'); send(N.A, { hop: 4 });
+      await pauseOn('mute', m => m.id === 'B', 'O Bruno está em CLIENT_MUTE: recebe e lê, mas nunca repete. Não gasta tempo de ar nem saltos, mas também não estende a rede.');
+      await pauseOn('relay', m => m.id === 'C', 'A Carla (CLIENT) esperou um pouco e, como ninguém repetiu antes dela, repete.');
+      await pauseOn('relay', m => m.id === 'D', 'O Duarte está em ROUTER: repete logo, quase sem esperar, e nunca cancela. É para pontos altos e estratégicos.');
+      await pauseOn('relay', m => m.id === 'E', 'A Eva (CLIENT) também repete, porque não ouviu mais ninguém fazê-lo.');
+      await pauseOn('relay', m => m.id === 'F', 'A Filipa está em ROUTER_LATE. Já tinha ouvido outros repetir, mas repete sempre, depois de todos. Serve para cobrir uma zona morta sem tirar a vez aos outros.');
+      await next('O Gil está em CLIENT_BASE. Para mensagens de ou para os seus favoritos, porta-se como ROUTER_LATE; para as outras, como CLIENT. É o modo pensado para o rádio do telhado.');
+      await next('Os outros modos (TRACKER, SENSOR, TAK, CLIENT_HIDDEN, LOST_AND_FOUND) são para casos especiais. Estão na tabela à esquerda.');
+      done();
+    } },
+  { part: 2, title: 'Os modos recomendados em Portugal',
+    body: 'A comunidade meshtastic.pt propõe quatro modos base. Usam os modos do firmware com configurações escolhidas para a rede portuguesa. ROUTER e ROUTER_LATE só em locais combinados com os curadores da zona.',
+    blocks: [['Modos da comunidade', PT_TABLE]],
+    setup() { configure({ hop: 5, mqtt: true, gateway: 'G', roles: { A: 'CLIENT_MUTE', C: 'CLIENT_BASE', D: 'CLIENT_BASE', G: 'CLIENT_BASE', H: 'CLIENT_MUTE' }, favs: { C: ['D'], D: ['C'] },
+      subs: { A: 'CM · portátil', B: 'CL · em casa', C: 'GT · telhado ★ Duarte', D: 'GT · telhado ★ Carla', E: 'CL', F: 'CL', G: 'GW · Wi-Fi + MQTT', H: 'CM · portátil' } }); },
+    async script() {
+      T('Cada rádio tem agora o modo da comunidade que lhe corresponde. A legenda por cima dos nomes diz qual.');
+      await next('<b>CM</b> (CLIENT_MUTE): rádios portáteis ou dentro de casa, como os da Ana e da Helena. Não repetem, para não gastarem saltos nem tempo de ar.');
+      await next('<b>CL</b> (CLIENT): rádios fixos com pouca linha de vista, como os do Bruno, da Eva e da Filipa. Repetem quando é preciso.');
+      await next('<b>GT</b> (CLIENT_BASE, sem Wi-Fi): rádios fixos no telhado, como os da Carla e do Duarte, que têm um ao outro nos favoritos.');
+      await next('<b>GW</b> (CLIENT_BASE com Wi-Fi): como um GT, mas com MQTT ativo. O Gil liga esta malha ao servidor da comunidade.');
+      await next('A Ana (CM) envia uma mensagem com 5 saltos.'); send(N.A, { hop: 5 });
+      await pauseOn('relay', m => m.id === 'C', 'A Carla (GT) repete. É o primeiro salto, por isso desconta: 5 → 4.');
+      await pauseOn('relay', m => m.id === 'D', (m, out) => `O Duarte (GT) recebeu da Carla, que é favorita e CLIENT_BASE. Repete sem descontar: <code>hop_limit</code> fica ${out.hop_limit}.`);
+      await pauseOn('up', null, 'O Gil (GW) recebe por rádio e envia uma cópia para o servidor MQTT, de onde chega a outras malhas.');
+      await next('Todos estes modos usam rebroadcast <code>CORE_PORTNUMS_ONLY</code>: só repetem mensagens, posições, nodeinfo, telemetria e routing. Tráfego de outras apps não é repetido.');
+      done();
+    } },
+  { part: 2, title: 'Favoritos: saltos que não se gastam', follow: true,
+    body: '“Tenho um rádio no telhado e outro em casa. Estou a queimar saltos? É verdade que pôr nos favoritos não desconta?”',
+    faq: true,
+    blocks: [
+      ['O que a comunidade responde', 'Os rádios de dentro de casa em CLIENT_MUTE, o do telhado em CLIENT_BASE, e pôr nos favoritos os ROUTER e CLIENT_BASE vizinhos para não consumir saltos.'],
+      ['O que o código confirma', 'É verdade, com condições. O salto só não é descontado quando quem repete é ROUTER, ROUTER_LATE ou CLIENT_BASE e o rádio anterior (identificado pelo <code>relay_node</code>) é um favorito com um desses modos. O primeiro salto desconta sempre.<span class="ref">src/mesh/Router.cpp · shouldDecrementHopLimit()</span>'],
+    ],
+    setup() { configure({ hop: 3 }); },
+    async script() {
+      T('Primeiro, todos em CLIENT, com 3 saltos.');
+      await next('A Ana transmite.'); send(N.A);
+      await pauseOn('end', m => m.id === 'G', 'O Gil recebe com <code>hop_limit</code> 0 e não repete. A Helena fica de fora.');
+      markMiss();
+      await next('Agora a Carla e o Duarte passam a CLIENT_BASE e põem-se um ao outro nos favoritos. A Ana envia outra vez, com os mesmos 3 saltos.');
+      configure({ hop: 3, follow: true, roles: { C: 'CLIENT_BASE', D: 'CLIENT_BASE' }, favs: { C: ['D'], D: ['C'] } });
+      send(N.A);
+      await pauseOn('relay', m => m.id === 'C', 'A Carla repete. É o primeiro salto: desconta sempre, 3 → 2.');
+      await pauseOn('relay', m => m.id === 'D', 'O Duarte é CLIENT_BASE e o <code>relay_node</code> (<code>c3</code>) é a Carla, favorita e CLIENT_BASE. Repete sem descontar: o <code>hop_limit</code> fica 2.');
+      await pauseOn('rx', m => m.id === 'H', 'Agora a Helena recebe, com os mesmos 3 saltos de partida.');
+      await next('Usa isto com cuidado: rádios que não descontam saltos levam as mensagens mais longe, mas também enchem mais o ar.');
+      done();
+    } },
+
+  /* ---------------- Parte 4: MQTT ---------------- */
+  { part: 3, title: 'MQTT: uma ponte opcional para a internet',
+    body: 'A malha funciona só com rádio. O MQTT é opcional: um rádio com internet (gateway) envia cópias das mensagens para um servidor, e o servidor liga malhas que estão longe umas das outras.',
+    blocks: [['Para quem quer mais detalhe', 'MQTT é um protocolo leve de mensagens. A comunidade portuguesa mantém um servidor em <code>mqtt.meshtastic.pt</code>. Um gateway precisa de Wi-Fi (ou de ligação ao telemóvel com Proxy to Client) e do módulo MQTT ligado.']],
+    setup() { configure({ hop: 4, mqtt: true, gateway: 'G', showText: true, text: 'Alguém me ouve?' }); },
+    async script() {
+      T('À direita, a roxo: o Gil é um gateway (GW), por cima está o servidor MQTT e, no canto, uma malha no Porto, longe demais para o rádio.');
+      await next('A Ana envia «Alguém me ouve?» no LongFast.'); send(N.A, { hop: 4 });
+      await pauseOn('up', null, 'O Gil recebe por rádio. Como é gateway, envia uma cópia pela internet para o servidor MQTT.');
+      await pauseOn('remote', null, 'O servidor passa a mensagem a outros gateways. Alguém no Porto lê a mensagem da Ana sem nenhum rádio pelo meio.');
+      await next('Do Porto chega uma resposta. Vai pela internet até ao Gil, que a transmite por rádio para esta serra.');
+      configure({ hop: 4, mqtt: true, gateway: 'G', showText: true, follow: false });
+      mqttDown(N.G, 'Ouço-te do Porto!');
+      await pauseOn('rx', m => m.id === 'A', 'A Ana recebe a resposta do Porto por rádio, através do Gil e dos outros rádios.');
+      await next('Sem gateways, a mensagem só chega aonde os rádios chegam. Com eles, chega a outras malhas. Se a internet falhar, a malha de rádio continua a funcionar.');
+      done();
+    } },
+  { part: 3, title: 'OK to MQTT, via_mqtt e Ignore MQTT', follow: true, faq: true,
+    body: '“Sem MQTT ativo, uma mensagem no LongFast só chega a quem estiver ao meu alcance por rádio? E para que servem o OK to MQTT e o Ignore MQTT?”',
+    blocks: [
+      ['O que a comunidade responde', 'Sim: vai só por rádio até encontrar um rádio com MQTT ativo. O MQTT é resiliência extra; a rede funciona sem ele. Recomenda-se "MQTT passivo": sem internet no rádio, mas com OK to MQTT ligado.'],
+      ['O que o código confirma', 'Dentro da parte cifrada vai o bit <code>ok_to_mqtt</code>. Um gateway só envia o pacote para um servidor público se esse bit estiver a 1. O que desce do MQTT vai com <code>via_mqtt</code> = 1 no cabeçalho, e um rádio com <code>ignore_mqtt</code> descarta-o.<span class="ref">src/mqtt/MQTT.cpp · onSend (DontMqttMeBro) · src/mesh/Router.cpp · ignore_mqtt</span>'],
+      ['Os três estados na meshtastic.pt', '<b>Ativo</b>: MQTT ligado com internet (gateway). <b>Passivo</b> (recomendado): MQTT desligado, OK to MQTT ligado, Ignore MQTT desligado. <b>Desligado</b>: OK to MQTT desligado e Ignore MQTT ligado. Isola o rádio e só serve para testes.'],
+    ],
+    setup() { configure({ hop: 3, mqtt: true, gateway: 'G', ignoreMqtt: ['H'] }); },
+    async script() {
+      T('O Gil é gateway. A Helena tem Ignore MQTT ligado.');
+      await next('A Ana envia «Teste só por rádio» com <code>ok_to_mqtt</code> = 0.');
+      send(N.A, { ok_to_mqtt: false, text: 'Teste só por rádio' });
+      await pauseOn('noUp', null, 'O Gil recebe, mas a mensagem tem <code>ok_to_mqtt</code> = 0 (um bit dentro da parte cifrada). Fica só na malha de rádio.');
+      await next('A Ana envia agora «Alguém me ouve?» com <code>ok_to_mqtt</code> = 1.');
+      configure({ hop: 3, mqtt: true, gateway: 'G', ignoreMqtt: ['H'], follow: true });
+      send(N.A, { ok_to_mqtt: true, text: 'Alguém me ouve?' });
+      await pauseOn('up', null, (g, p) => { inspect(p, 'no gateway (Gil)'); return 'Agora o bit está a 1 e o Gil envia a mensagem para o servidor MQTT.'; });
+      await pauseOn('remote', null, 'O Porto recebe.');
+      await next('O Porto responde. A resposta desce pelo Gil.');
+      configure({ hop: 3, mqtt: true, gateway: 'G', ignoreMqtt: ['H'] });
+      mqttDown(N.G, 'Ouço-te do Porto!');
+      await pauseOn('down', null, 'O Gil transmite a resposta por rádio com <code>via_mqtt</code> = 1. Vê o bit "mqtt" nas flags do inspetor.');
+      await pauseOn('drop', m => m.id === 'H', 'A Helena tem Ignore MQTT ligado: descarta tudo o que traz <code>via_mqtt</code> = 1. Só aceita o que veio por rádio do princípio ao fim.');
+      done();
+    } },
+
+  /* ---------------- Parte 5: dúvidas ---------------- */
+  { part: 4, title: '“Tenho 4 saltos e recebo mensagens de 6 saltos”', faq: true,
+    body: '“Porque é que tenho o máximo de saltos a 4 e recebo mensagens de rádios a 6 saltos?”',
+    blocks: [
+      ['O que a comunidade responde', 'Depende de quem envia, não de quem recebe. Quem envia com mais saltos chega mais longe.'],
+      ['O que o código confirma', 'Certo. O <code>hop_limit</code> é escrito por quem cria o pacote; quem repete só o diminui. O teu limite só se aplica às mensagens que tu crias. A distância em saltos é <code>hop_start − hop_limit</code>.<span class="ref">src/mesh/Default.cpp · getConfiguredOrDefaultHopLimit() · src/mesh/NextHopRouter.cpp</span>'],
+    ],
+    setup() { configure({ hop: 7, subs: { A: 'configurou 3 saltos', H: 'configurou 7 saltos' } }); },
+    async script() {
+      T('A Helena configurou 7 saltos. A Ana configurou 3.');
+      await next('A Helena envia uma mensagem.'); send(N.H, { hop: 7 });
+      await pauseOn('rx', m => m.id === 'A', (m, p) => { inspect(p, 'recebido pela Ana'); return `A Ana recebe com <code>hop_start</code> ${p.hop_start} e <code>hop_limit</code> ${p.hop_limit}: a Helena está a <b>${hopsAway(p)} saltos</b>, mais do que os 3 que a Ana configurou. E ainda restam ${p.hop_limit} saltos, por isso a Ana também repete.`; });
+      await next('Usa o valor recomendado para a tua zona (a meshtastic.pt sugere 4 para clientes). Mais saltos só enchem o ar.');
+      done();
+    } },
+  { part: 4, title: '“O CLIENT_MUTE retransmite?”', faq: true,
+    body: '“O CLIENT_MUTE retransmite os pacotes que ouve? Conta para os saltos?”',
+    blocks: [
+      ['O que a comunidade responde', 'As respostas no grupo dividiram-se: houve quem dissesse que retransmite com prioridade mínima e quem dissesse que não conta para os saltos.'],
+      ['O que o código confirma', '<code>CLIENT_MUTE</code> nunca repete pacotes de outros rádios. Por isso não gasta saltos, mas também não estende a rede.<span class="ref">src/mesh/FloodingRouter.cpp · isRebroadcaster()</span>'],
+    ],
+    setup() { configure({ hop: 4, roles: { D: 'CLIENT_MUTE' } }); },
+    async script() {
+      T('O Duarte é o único caminho para o resto da serra, e está em CLIENT_MUTE.');
+      await next('A Ana envia uma mensagem com 4 saltos.'); send(N.A, { hop: 4 });
+      await pauseOn('mute', m => m.id === 'D', 'O Duarte recebe e lê a mensagem, mas está em CLIENT_MUTE: não a repete.');
+      await W(3);
+      await next('Tudo o que estava depois do Duarte fica sem a mensagem. Num ponto de passagem, usa CLIENT ou CLIENT_BASE; o CLIENT_MUTE é para rádios extra ao lado de um rádio melhor colocado.');
+      markMiss(); done();
+    } },
+  { part: 4, title: '“Quem é o ffff no traceroute?”', follow: true, faq: true,
+    body: '“No traceroute aparece um nó ffff por onde passa tráfego, mas não está na minha lista. É algum nó especial?”',
+    blocks: [
+      ['O que a comunidade responde', 'É um rádio pelo caminho que não decifrou o pacote, por exemplo por estar noutro canal ou sem a chave.'],
+      ['O que o código confirma', 'Quem não decifra repete na mesma (o cabeçalho está em claro) e desconta o salto, mas não consegue escrever o seu ID na rota. No fim, o firmware compara os saltos feitos (<code>hop_start − hop_limit</code>) com os IDs da rota e preenche a diferença com <code>ffffffff</code>.<span class="ref">src/modules/TraceRouteModule.cpp · insertUnknownHops()</span>'],
+    ],
+    setup() { configure({ hop: 4, follow: true, channels: { E: 'Família' } }); },
+    async script() {
+      T('A Eva está só no canal Família, por isso não tem a chave do LongFast.');
+      await next('A Ana faz um traceroute ao Gil.'); send(N.A, { to: N.G, port: 'TRACEROUTE', hop: 4 });
+      await pauseOn('relay', m => m.id === 'E', 'A Eva não decifra o traceroute, por isso não se acrescenta à rota. Mas repete-o e desconta um salto.');
+      await pauseOn('trace', null, (m, p) => `O Gil recebe: ${hopsAway(p)} saltos feitos, mas só ${p.route.filter(x => x !== 0xffffffff).length} IDs na rota. A diferença aparece como <code>ffffffff</code> (vê a rota no inspetor).`);
+      await next('Um <code>ffff</code> não é um rádio misterioso. Quer apenas dizer que um rádio do caminho não conseguiu ler o pacote.');
+      done();
+    } },
+  { part: 4, title: '“Que frequência e que slot?”', faq: true,
+    body: '“Que frequência devo usar em Portugal? 868 ou 869? E o frequency slot é 0 ou 1?”',
+    blocks: [
+      ['O que a comunidade responde', 'Em Portugal usa-se a região EU_868. O slot 1 garante o centro nos 869,525 MHz; o slot 0 deixa o rádio escolher pelo preset. O duty cycle de 10% dá 6 minutos de emissão por hora.'],
+      ['O que o código confirma', 'A região <code>EU_868</code> vai de 869,4 a 869,65 MHz, com 27 dBm e duty cycle de 10%. O LongFast usa 250 kHz, por isso só cabe um canal, centrado em 869,525 MHz. Com o slot 0 o rádio calcula o slot a partir do nome do preset; como só há um, o resultado é o mesmo.<span class="ref">src/mesh/RadioInterface.cpp · RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, …)</span>'],
+    ],
+    extra: () => {
+      const ms = Math.round(airtimeMs(46)), per = Math.floor(360000 / ms);
+      return `<svg viewBox="0 0 380 118" style="width:100%;height:auto" role="img" aria-label="Banda EU_868 de 869,4 a 869,65 MHz, com o canal LongFast de 250 kHz centrado em 869,525 MHz">
+        <rect x="10" y="30" width="360" height="40" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+        <rect x="14" y="34" width="352" height="32" rx="3" fill="var(--signal)" fill-opacity=".18" stroke="var(--signal)"/>
+        <line x1="190" y1="24" x2="190" y2="76" stroke="var(--packet)" stroke-dasharray="3 3"/>
+        <text x="190" y="54" text-anchor="middle" fill="var(--fg)" font-family="IBM Plex Mono, monospace" font-size="12">LongFast · 250 kHz · slot 1</text>
+        <text x="190" y="18" text-anchor="middle" fill="var(--packet)" font-family="IBM Plex Mono, monospace" font-size="11">869,525 MHz</text>
+        <text x="10" y="88" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11">869,4</text>
+        <text x="370" y="88" text-anchor="end" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11">869,65 MHz</text>
+        <text x="10" y="110" fill="var(--muted)" font-family="IBM Plex Sans, sans-serif" font-size="11.5">Mensagem de 30 bytes ≈ ${ms} ms no ar → 10% de 1 h ≈ ${per} mensagens destas por hora</text>
+      </svg>`;
+    },
+    setup() { configure({ mode: 'simple', range: true, links: false }); },
+    async script() {
+      T('Todos os rádios da região EU_868 falam na mesma faixa estreita, perto dos 869,5 MHz (vê o esquema à esquerda).');
+      await next('A Ana transmite três vezes.');
+      for (let i = 0; i < 3; i++) { send(N.A, { hop: 0 }); await W(2.6); }
+      await next('Cada transmissão ocupa o ar. Com duty cycle de 10%, cada rádio só pode emitir 6 minutos por hora, e isso inclui as repetições que faz pelos outros.');
+      done();
+    } },
+
+  /* ---------------- Parte 6 ---------------- */
+  { part: 5, title: 'Experimenta tu', sandbox: true, follow: true,
+    body: 'Toca num rádio para o selecionar. Muda-lhe o modo, escolhe os saltos e carrega em "Enviar daqui". Compara quantas transmissões são precisas.',
+    setup() { configure({ hop: +$('hop').value, managed: $('managed').checked, follow: true, sandbox: true, roles: sandboxRoles }); },
+    async script() { T('Seleciona um rádio no mapa e carrega em "Enviar daqui".'); done(); } },
+];
+
+/* ================= navegação ================= */
+let current = 0; const seen = new Set();
+const stepsEl = $('steps');
+PARTS.forEach((_, pi) => {
+  const g = document.createElement('div'); g.className = 'grp';
+  SCENES.forEach((s, i) => {
+    if (s.part !== pi) return;
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.i = i;
+    b.setAttribute('aria-label', `Passo ${i + 1}: ${s.title}`); b.title = s.title;
+    b.addEventListener('click', () => go(i)); g.appendChild(b);
+  });
+  stepsEl.appendChild(g);
+});
+function go(i) {
+  current = (i + SCENES.length) % SCENES.length; seen.add(current);
+  const s = SCENES[current];
+  listeners = []; clickR = null; simPaused = false; beatN = 0;
+  $('eyebrow').textContent = `Parte ${s.part + 1} · ${PARTS[s.part]} · passo ${current + 1} de ${SCENES.length}`;
+  $('title').textContent = s.title;
+  const body = $('body'); body.textContent = s.body; body.classList.toggle('q', !!s.faq);
+  $('blocks').innerHTML = (s.blocks ?? []).map(([l, t]) => `<div class="blk${/código confirma/.test(l) ? ' code' : ''}"><span class="lbl">${l}</span>${t.startsWith('<div') ? t : `<p>${t}</p>`}</div>`).join('') + (s.extra ? `<div class="blk">${s.extra()}</div>` : '');
+  $('sandbox').hidden = !s.sandbox;
+  $('pkt').hidden = s.part === 0;
+  stepsEl.querySelectorAll('button').forEach(b => {
+    const j = +b.dataset.i;
+    if (j === current) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    b.classList.toggle('seen', seen.has(j) && j !== current);
+  });
+  $('prev').disabled = current === 0;
+  highlight(null);
+  $('pktEmpty').hidden = false; $('pktFull').hidden = true; $('pktWho').textContent = 'Ainda nenhum pacote'; $('pktSum').textContent = '';
+  setBtn('run');
+  s.setup();
+  s.script().catch(e => console.error(e));
+  $('story').scrollTop = 0;
+}
+$('prev').addEventListener('click', () => go(current - 1));
+$('replay').addEventListener('click', () => go(current));
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  speed = +b.dataset.speed; document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+}));
+addEventListener('keydown', e => {
+  if (['INPUT', 'SELECT', 'BUTTON'].includes(e.target.tagName) && e.key !== 'ArrowRight') return;
+  if (e.key === 'ArrowRight' && !nextBtn.disabled) { e.preventDefault(); nextBtn.click(); }
+  if (e.key === 'ArrowLeft') go(current - 1);
+});
+$('pktToggle').addEventListener('click', () => { const o = $('pkt').classList.toggle('open'); $('pktToggle').setAttribute('aria-expanded', o); });
+
+/* experimenta */
+let sel = N.A; const sandboxRoles = {};
+function selectNode(n) {
+  sel = n; $('selName').textContent = n.name; $('roleSel').value = n.role;
+  NODES.forEach(m => m.g.classList.toggle('sel', m === n));
+  if (n.lastRx) inspect(n.lastRx, `última cópia recebida por ${n.name}`);
+}
+$('roleSel').addEventListener('change', () => {
+  sandboxRoles[sel.id] = $('roleSel').value;
+  configure({ hop: +$('hop').value, managed: $('managed').checked, follow: true, sandbox: true, roles: sandboxRoles });
+  selectNode(sel);
+});
+$('sendBtn').addEventListener('click', () => { resetSim(); cfg.hop = +$('hop').value; cfg.managed = $('managed').checked; send(sel); T(`${sel.name} enviou uma mensagem com ${cfg.hop} saltos. Acompanha os rótulos no mapa e o pacote à direita.`); });
+$('hop').addEventListener('input', () => { $('hopOut').textContent = $('hop').value; });
+
+/* ================= ciclo ================= */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (!simPaused) {
+    simTime += dt * speed; processEvents();
+    for (let i = fx.length - 1; i >= 0; i--) if (!fx[i].update()) { fx[i].el.remove(); fx.splice(i, 1); }
+  }
+  document.body.classList.toggle('paused', simPaused);
+  for (const n of NODES) { const k = Math.max(0, 1 - (simTime - n.pulse) / .6); n.pl.setAttribute('r', 5 + k * 4); }
+  if (btnState === 'run' && now - runSince > 25000) setBtn('skip');
+  requestAnimationFrame(frame);
+}
+go(0);
+placeLabels();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
